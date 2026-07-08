@@ -5,19 +5,21 @@ import { tmpdir } from "os";
 import type { PreAnalysis } from "./analysis";
 
 /**
- * Calls the Python pre-processor script to do deterministic keyword extraction,
- * skill matching, and rough overlap scoring BEFORE the LLM call.
- *
- * This reduces the LLM's job: it gets pre-extracted keywords + a rough score
- * so it can focus on semantic reasoning, project generation, and nuance.
- *
- * Falls back gracefully — if Python isn't available, we do a minimal
- * keyword extraction in JS and proceed.
+ * Deterministic keyword extraction before the LLM call.
+ * On Vercel / when Python is unavailable, uses pure JS (no spawn).
  */
 export async function runPreAnalysis(jdText: string, resumeText: string): Promise<PreAnalysis> {
+  const forceJs =
+    process.env.VERCEL === "1" ||
+    process.env.PYTHON_PREANALYZE === "false" ||
+    process.env.PYTHON_PREANALYZE === "0";
+
+  if (forceJs) {
+    return jsFallback(jdText, resumeText);
+  }
+
   try {
-    const result = await callPython(jdText, resumeText);
-    return result;
+    return await callPython(jdText, resumeText);
   } catch (err) {
     console.warn("Python pre-analysis failed, using JS fallback:", err);
     return jsFallback(jdText, resumeText);
@@ -46,7 +48,13 @@ async function callPython(jdText: string, resumeText: string): Promise<PreAnalys
       stderr += d.toString();
     });
 
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("Python pre-analysis timed out"));
+    }, 8_000);
+
     child.on("close", (code) => {
+      clearTimeout(timer);
       try {
         if (code !== 0) {
           reject(new Error(`Python exited ${code}: ${stderr}`));
@@ -67,13 +75,12 @@ async function callPython(jdText: string, resumeText: string): Promise<PreAnalys
     });
 
     child.on("error", (e) => {
+      clearTimeout(timer);
       rmSync(tmpDir, { recursive: true, force: true });
       reject(e);
     });
   });
 }
-
-// ── JS Fallback (minimal) ───────────────────────────────────────
 
 const SKILL_LIST = [
   "python", "javascript", "typescript", "java", "go", "rust", "c++", "c#",
@@ -83,6 +90,7 @@ const SKILL_LIST = [
   "machine learning", "deep learning", "pytorch", "tensorflow", "nlp",
   "ci/cd", "git", "linux", "tailwind", "prisma", "drizzle", "auth.js",
   "vercel", "supabase", "firebase", "neon", "llm", "rag", "openai",
+  "dsa", "algorithms", "system design", "sql", "html", "css",
 ];
 
 function jsFallback(jdText: string, resumeText: string): PreAnalysis {

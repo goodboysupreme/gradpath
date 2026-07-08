@@ -152,7 +152,10 @@ export default function AnalyzePage() {
       formData.append("targetRole", targetRole);
       formData.append("jd", jdText);
       formData.append("intakeMode", resumeMode === "profile" ? "profile" : resumeMode);
-      formData.append("studentContext", JSON.stringify(profile));
+      formData.append("studentContext", JSON.stringify({
+        ...profile,
+        degree: profile.degree || "BE",
+      }));
 
       if (resumeMode === "upload" && resumeFile) {
         formData.append("resumeFile", resumeFile);
@@ -162,19 +165,50 @@ export default function AnalyzePage() {
         formData.append("resumeText", resumeText);
       }
 
-      const res = await fetch("/api/analyze", { method: "POST", body: formData });
-      const data = await res.json();
+      const controller = new AbortController();
+      const timeoutMs = 90_000;
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+      let res: Response;
+      try {
+        res = await fetch("/api/analyze", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+
+      const raw = await res.text();
+      let data: Record<string, unknown> = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        if (res.status === 504 || res.status === 408 || /timeout|FUNCTION_INVOCATION/i.test(raw)) {
+          setError("Server timed out while analyzing. On free Vercel this is common for slow LLM models — try paste-resume mode, a shorter JD, or set OPENROUTER_MODEL to a faster free model.");
+          return;
+        }
+        setError(
+          `Server returned a non-JSON response (HTTP ${res.status}). ${raw.slice(0, 180) || "Empty body — check Vercel function logs."}`,
+        );
+        return;
+      }
 
       if (!res.ok) {
-        setError(data.error || "Analysis failed.");
+        setError(typeof data.error === "string" ? data.error : `Analysis failed (HTTP ${res.status}).`);
         if (res.status === 429 && usage) setUsage({ used: usage.limit, limit: usage.limit });
         return;
       }
 
-      setResult(data);
-      setUsage((current) => current ? { used: current.used + 1, limit: current.limit } : { used: 1, limit: 5 });
-    } catch {
-      setError("Network error. Try again.");
+      setResult(data as unknown as AnalyzeResponse);
+      setUsage((current) => (current ? { used: current.used + 1, limit: current.limit } : { used: 1, limit: 5 }));
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Request timed out after 90s. Try a shorter JD or paste resume text instead of a large PDF.");
+      } else {
+        setError(`Network error: ${err instanceof Error ? err.message : "request failed"}. Check that /api/analyze is reachable.`);
+      }
     } finally {
       setLoading(false);
     }

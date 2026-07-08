@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/db";
 import { analyses, studentProfiles } from "@/db/schema";
 import { extractResumeText, PdfError } from "@/lib/pdf";
 import { runPreAnalysis } from "@/lib/pre-analysis";
-import { analysisResultSchema, buildUserPrompt, SYSTEM_PROMPT, type PreAnalysis } from "@/lib/analysis";
-import { resolveUserId } from "@/lib/guest-user";
-import { sql, gte, and, eq } from "drizzle-orm";
-import { generateObject } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { type PreAnalysis } from "@/lib/analysis";
+import { ensureGuestUser } from "@/lib/guest-user";
+import { runLlmAnalysis } from "@/lib/run-llm";
 
 export const runtime = "nodejs";
-export const maxDuration = 90;
-
-const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
-const DEFAULT_OPENROUTER_FALLBACK_MODEL = "openrouter/free";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type StudentContext = {
   fullName?: string;
@@ -32,29 +27,8 @@ type StudentContext = {
   preferredDomains?: string;
 };
 
-function getLLMClient() {
-  return createOpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
-    apiKey: process.env.OPENROUTER_API_KEY!,
-    headers: {
-      "HTTP-Referer": process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000",
-      "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME ?? "GradPath",
-    },
-    compatibility: "compatible",
-  });
-}
-
-async function getDailyLimit(userId: string): Promise<{ used: number; limit: number }> {
-  const limit = parseInt(process.env.DAILY_LIMIT ?? "5", 10);
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-
-  const rows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(analyses)
-    .where(and(eq(analyses.userId, userId), gte(analyses.createdAt, todayStart)));
-
-  return { used: rows[0]?.count ?? 0, limit };
+function jsonError(error: string, status: number, extra?: Record<string, unknown>) {
+  return NextResponse.json({ error, ...extra }, { status });
 }
 
 function parseContext(raw: FormDataEntryValue | null): StudentContext {
@@ -87,7 +61,9 @@ function buildProfileText(context: StudentContext) {
     textLine("Achievements", context.achievements),
     textLine("Links", context.links),
     textLine("Preferred domains", context.preferredDomains),
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildTargetBrief(company: string, role: string) {
@@ -146,187 +122,239 @@ async function saveStudentProfile(userId: string, context: StudentContext) {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth temporarily open: use session user when present, else shared guest.
-  const session = await auth().catch(() => null);
-  const userId = await resolveUserId(session?.user?.id);
+  try {
+    if (!process.env.OPENROUTER_API_KEY) {
+      return jsonError("OPENROUTER_API_KEY is not configured on the server.", 500);
+    }
+    if (!process.env.DATABASE_URL) {
+      return jsonError("DATABASE_URL is not configured on the server.", 500);
+    }
 
-  // Only enforce daily limit for real signed-in users (not the shared guest).
-  if (session?.user?.id) {
-    const { used, limit } = await getDailyLimit(userId);
-    if (used >= limit) {
-      return NextResponse.json(
-        { error: `Daily limit reached (${used}/${limit}). Try again tomorrow.` },
-        { status: 429 },
+    let userId: string;
+    try {
+      userId = await ensureGuestUser();
+    } catch (err) {
+      console.error("Guest user bootstrap failed:", err);
+      return jsonError(
+        `Database connection failed while creating guest user: ${err instanceof Error ? err.message : "unknown error"}`,
+        500,
       );
     }
-  }
 
-  let jdText = "";
-  let resumeText = "";
-  let resumeFilename: string | null = null;
-  let targetCompany = "";
-  let targetRole = "";
-  let intakeMode = "resume";
-  let studentContext: StudentContext = {};
+    let jdText = "";
+    let resumeText = "";
+    let resumeFilename: string | null = null;
+    let targetCompany = "";
+    let targetRole = "";
+    let intakeMode = "resume";
+    let studentContext: StudentContext = {};
 
-  const contentType = req.headers.get("content-type") ?? "";
+    const contentType = req.headers.get("content-type") ?? "";
 
-  if (contentType.includes("multipart/form-data")) {
-    const formData = await req.formData();
-    jdText = (formData.get("jd") as string)?.trim() ?? "";
-    targetCompany = (formData.get("targetCompany") as string)?.trim() ?? "";
-    targetRole = (formData.get("targetRole") as string)?.trim() ?? "";
-    intakeMode = ((formData.get("intakeMode") as string)?.trim() || "resume").toLowerCase();
-    resumeFilename = (formData.get("resumeFilename") as string) ?? null;
-    studentContext = parseContext(formData.get("studentContext"));
-    const resumeFile = formData.get("resumeFile") as File | null;
-    const resumePaste = (formData.get("resumeText") as string)?.trim() ?? "";
+    try {
+      if (contentType.includes("multipart/form-data")) {
+        const formData = await req.formData();
+        jdText = (formData.get("jd") as string)?.trim() ?? "";
+        targetCompany = (formData.get("targetCompany") as string)?.trim() ?? "";
+        targetRole = (formData.get("targetRole") as string)?.trim() ?? "";
+        intakeMode = ((formData.get("intakeMode") as string)?.trim() || "resume").toLowerCase();
+        resumeFilename = (formData.get("resumeFilename") as string) ?? null;
+        studentContext = parseContext(formData.get("studentContext"));
+        const resumeFile = formData.get("resumeFile") as File | null;
+        const resumePaste = (formData.get("resumeText") as string)?.trim() ?? "";
 
-    if (jdText.length < 50) {
-      if (!targetCompany || !targetRole) {
-        return NextResponse.json({ error: "Add a job description or enter both target company and role." }, { status: 400 });
+        if (jdText.length < 50) {
+          if (!targetCompany || !targetRole) {
+            return jsonError("Add a job description or enter both target company and role.", 400);
+          }
+          jdText = buildTargetBrief(targetCompany, targetRole);
+        }
+
+        if (intakeMode === "profile") {
+          resumeText = buildProfileText(studentContext);
+          resumeFilename = "student-profile";
+        } else if (resumeFile && typeof resumeFile === "object" && "arrayBuffer" in resumeFile) {
+          try {
+            const buffer = await resumeFile.arrayBuffer();
+            const result = await extractResumeText(buffer, resumeFile.name || "resume.pdf");
+            resumeText = result.text;
+            resumeFilename = resumeFile.name || "resume.pdf";
+          } catch (err) {
+            const message = err instanceof PdfError ? err.message : "Failed to parse resume file.";
+            return jsonError(message, 400);
+          }
+        } else if (resumePaste) {
+          resumeText = resumePaste;
+          intakeMode = "paste";
+        } else {
+          return jsonError("Upload a resume, paste resume text, or choose the no-resume guided profile.", 400);
+        }
+      } else {
+        const body = await req.json();
+        const asText = (value: unknown) => (typeof value === "string" ? value : value == null ? "" : String(value)).trim();
+        jdText = asText(body.jdText ?? body.jd);
+        targetCompany = asText(body.targetCompany);
+        targetRole = asText(body.targetRole);
+        intakeMode = asText(body.intakeMode) || "resume";
+        studentContext = body.studentContext && typeof body.studentContext === "object" ? body.studentContext : {};
+        resumeText = asText(body.resumeText);
+
+        if (jdText.length < 50) {
+          if (!targetCompany || !targetRole) {
+            return jsonError("Add a job description or enter both target company and role.", 400);
+          }
+          jdText = buildTargetBrief(targetCompany, targetRole);
+        }
+        if (intakeMode === "profile") resumeText = buildProfileText(studentContext);
       }
-      jdText = buildTargetBrief(targetCompany, targetRole);
+    } catch (err) {
+      console.error("Request parse error:", err);
+      return jsonError(
+        `Could not read request body: ${err instanceof Error ? err.message : "unknown error"}`,
+        400,
+      );
+    }
+
+    // Default program if omitted (open mode).
+    if (!studentContext.degree) {
+      studentContext = { ...studentContext, degree: "BE" };
+    }
+
+    if (!isSupportedDegree(studentContext.degree)) {
+      return jsonError("Select program BE or MTech to continue.", 403);
     }
 
     if (intakeMode === "profile") {
-      resumeText = buildProfileText(studentContext);
-      resumeFilename = "student-profile";
-    } else if (resumeFile) {
-      try {
-        const buffer = await resumeFile.arrayBuffer();
-        const result = await extractResumeText(buffer, resumeFile.name);
-        resumeText = result.text;
-        resumeFilename = resumeFile.name;
-      } catch (err) {
-        const message = err instanceof PdfError ? err.message : "Failed to parse resume file.";
-        return NextResponse.json({ error: message }, { status: 400 });
+      const enoughProfile = [studentContext.degree, studentContext.branch, studentContext.skills, studentContext.projects, studentContext.courses]
+        .filter((value) => value && value.trim().length > 0).length >= 3;
+      if (!enoughProfile || resumeText.length < 80) {
+        return jsonError("Add degree, branch, skills, and at least one project/course detail for the guided profile.", 400);
       }
-    } else if (resumePaste) {
-      resumeText = resumePaste;
-      intakeMode = "paste";
-    } else {
-      return NextResponse.json({ error: "Upload a resume, paste resume text, or choose the no-resume guided profile." }, { status: 400 });
+    } else if (resumeText.length < 50) {
+      return jsonError("Resume text is too short (min 50 chars). If PDF upload failed, paste resume text instead.", 400);
     }
-  } else {
-    const body = await req.json();
-    jdText = body.jdText?.trim() ?? "";
-    targetCompany = body.targetCompany?.trim() ?? "";
-    targetRole = body.targetRole?.trim() ?? "";
-    intakeMode = body.intakeMode?.trim() ?? "resume";
-    studentContext = body.studentContext ?? {};
-    resumeText = body.resumeText?.trim() ?? "";
 
-    if (jdText.length < 50) {
-      if (!targetCompany || !targetRole) {
-        return NextResponse.json({ error: "Add a job description or enter both target company and role." }, { status: 400 });
-      }
-      jdText = buildTargetBrief(targetCompany, targetRole);
-    }
-    if (intakeMode === "profile") resumeText = buildProfileText(studentContext);
-  }
-
-  if (!isSupportedDegree(studentContext.degree)) {
-    return NextResponse.json({ error: "This tool is restricted to BITS BE and MTech students. Select your program to continue." }, { status: 403 });
-  }
-
-  if (intakeMode === "profile") {
-    const enoughProfile = [studentContext.degree, studentContext.branch, studentContext.skills, studentContext.projects, studentContext.courses]
-      .filter((value) => value && value.trim().length > 0).length >= 3;
-    if (!enoughProfile || resumeText.length < 80) {
-      return NextResponse.json({ error: "Add degree, branch, skills, and at least one project/course detail for the guided profile." }, { status: 400 });
-    }
-  } else if (resumeText.length < 50) {
-    return NextResponse.json({ error: "Resume text is too short (min 50 chars)." }, { status: 400 });
-  }
-
-  let pre: PreAnalysis;
-  try {
-    pre = await runPreAnalysis(jdText, resumeText);
-  } catch (err) {
-    console.error("Pre-analysis error:", err);
-    pre = {
-      jd_keywords: [], resume_keywords: [], matched_keywords: [], missing_keywords: [],
-      jd_keyword_scores: {}, rough_match_percentage: 0,
-      resume_sections_found: [], jd_sections_found: [],
-      total_jd_keywords: 0, total_resume_keywords: 0, total_matched: 0, total_missing: 0,
-    };
-  }
-
-  if (!process.env.OPENROUTER_API_KEY) {
-    return NextResponse.json({ error: "OPENROUTER_API_KEY is not configured." }, { status: 500 });
-  }
-
-  const client = getLLMClient();
-  const userPrompt = buildUserPrompt(jdText, resumeText, pre, {
-    company: targetCompany,
-    role: targetRole,
-    intakeMode,
-  });
-
-  let result;
-  try {
-    result = await generateObject({
-      model: client(process.env.OPENROUTER_MODEL ?? DEFAULT_OPENROUTER_MODEL),
-      system: SYSTEM_PROMPT,
-      prompt: userPrompt,
-      schema: analysisResultSchema,
-      temperature: 0.3,
-      maxTokens: 3200,
-    });
-  } catch (primaryErr) {
-    console.error("Primary LLM failed, trying fallback:", primaryErr);
+    let pre: PreAnalysis;
     try {
-      result = await generateObject({
-        model: client(process.env.OPENROUTER_FALLBACK_MODEL ?? DEFAULT_OPENROUTER_FALLBACK_MODEL),
-        system: SYSTEM_PROMPT,
-        prompt: userPrompt,
-        schema: analysisResultSchema,
-        temperature: 0.3,
-        maxTokens: 3200,
-      });
-    } catch (fallbackErr) {
-      console.error("Fallback LLM also failed:", fallbackErr);
-      return NextResponse.json({ error: "AI analysis failed. Please try again." }, { status: 502 });
+      pre = await runPreAnalysis(jdText, resumeText);
+    } catch (err) {
+      console.error("Pre-analysis error:", err);
+      pre = {
+        jd_keywords: [],
+        resume_keywords: [],
+        matched_keywords: [],
+        missing_keywords: [],
+        jd_keyword_scores: {},
+        rough_match_percentage: 0,
+        resume_sections_found: [],
+        jd_sections_found: [],
+        total_jd_keywords: 0,
+        total_resume_keywords: 0,
+        total_matched: 0,
+        total_missing: 0,
+      };
     }
+
+    let analysis;
+    try {
+      analysis = await runLlmAnalysis(jdText, resumeText, pre, {
+        company: targetCompany,
+        role: targetRole,
+        intakeMode,
+      });
+    } catch (err) {
+      console.error("LLM analysis failed:", err);
+      return jsonError(
+        err instanceof Error ? err.message : "AI analysis failed. Please try again.",
+        502,
+      );
+    }
+
+    try {
+      await saveStudentProfile(userId, studentContext);
+    } catch (err) {
+      console.warn("Profile save skipped:", err);
+    }
+
+    try {
+      const [inserted] = await db
+        .insert(analyses)
+        .values({
+          userId,
+          targetCompany: targetCompany || null,
+          targetRole: targetRole || null,
+          intakeMode,
+          jdText,
+          resumeText,
+          resumeFilename,
+          studentContext,
+          result: analysis,
+          matchScore: analysis.matchScore,
+        })
+        .returning({ id: analyses.id });
+
+      return NextResponse.json({
+        id: inserted.id,
+        targetCompany,
+        targetRole,
+        intakeMode,
+        ...analysis,
+        preAnalysis: {
+          roughMatchPercentage: pre.rough_match_percentage,
+          totalMatched: pre.total_matched,
+          totalMissing: pre.total_missing,
+        },
+      });
+    } catch (err) {
+      console.error("DB insert error (returning unsaved analysis):", err);
+      // Still return the analysis so the UI is usable if DB write fails.
+      return NextResponse.json({
+        id: "unsaved",
+        targetCompany,
+        targetRole,
+        intakeMode,
+        ...analysis,
+        warning: "Analysis completed but was not saved to history.",
+        preAnalysis: {
+          roughMatchPercentage: pre.rough_match_percentage,
+          totalMatched: pre.total_matched,
+          totalMissing: pre.total_missing,
+        },
+      });
+    }
+  } catch (err) {
+    console.error("Unhandled /api/analyze error:", err);
+    return jsonError(
+      `Server error: ${err instanceof Error ? err.message : "unknown failure"}`,
+      500,
+    );
+  }
+}
+
+/** Lightweight health check for env wiring. */
+export async function GET() {
+  const checks = {
+    ok: true,
+    openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+    database: Boolean(process.env.DATABASE_URL),
+    model: process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-nano-30b-a3b:free",
+  };
+
+  if (!checks.openrouter || !checks.database) {
+    return NextResponse.json({ ...checks, ok: false }, { status: 500 });
   }
 
-  const analysis = result.object;
-
   try {
-    await saveStudentProfile(userId, studentContext);
-    const [inserted] = await db
-      .insert(analyses)
-      .values({
-        userId,
-        targetCompany: targetCompany || null,
-        targetRole: targetRole || null,
-        intakeMode,
-        jdText,
-        resumeText,
-        resumeFilename,
-        studentContext,
-        result: analysis,
-        matchScore: analysis.matchScore,
-      })
-      .returning({ id: analyses.id });
-
-    return NextResponse.json({
-      id: inserted.id,
-      targetCompany,
-      targetRole,
-      intakeMode,
-      ...analysis,
-      preAnalysis: {
-        roughMatchPercentage: pre.rough_match_percentage,
-        totalMatched: pre.total_matched,
-        totalMissing: pre.total_missing,
-      },
-    });
+    const guestId = await ensureGuestUser();
+    return NextResponse.json({ ...checks, dbReachable: true, guestId });
   } catch (err) {
-    console.error("DB insert error:", err);
     return NextResponse.json(
-      { error: "Analysis complete but failed to save. Result not stored." },
+      {
+        ...checks,
+        ok: false,
+        dbReachable: false,
+        error: err instanceof Error ? err.message : "db error",
+      },
       { status: 500 },
     );
   }

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 export const analysisResultSchema = z.object({
   matchScore: z.number().int().min(0).max(100),
-  summary: z.string().min(50).max(700),
+  // Looser bounds so free OpenRouter models still pass structured validation.
+  summary: z.string().min(20).max(1200),
   strengths: z
     .array(
       z.object({
@@ -26,7 +27,7 @@ export const analysisResultSchema = z.object({
     .array(
       z.object({
         title: z.string(),
-        description: z.string().max(300),
+        description: z.string().max(500),
         skillsCovered: z.array(z.string()).min(1),
         effort: z.enum(["weekend", "1-2 weeks", "month"]),
       }),
