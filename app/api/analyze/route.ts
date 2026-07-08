@@ -261,6 +261,10 @@ export async function POST(req: NextRequest) {
         company: targetCompany,
         role: targetRole,
         intakeMode,
+        season:
+          typeof studentContext.preferredDomains === "string"
+            ? studentContext.preferredDomains
+            : undefined,
       });
     } catch (err) {
       console.error("LLM analysis failed:", err);

@@ -22,7 +22,14 @@ import { UsageBadge } from "@/components/usage-badge";
 import { ResultPanels } from "@/components/result-panels";
 import { ResumeDropzone } from "@/components/resume-dropzone";
 import { SampleJdPicker } from "@/components/sample-jd-picker";
-import { ROLE_OPTIONS, type RoleId, type SampleJd } from "@/lib/sample-jds";
+import {
+  SEASON_OPTIONS,
+  getRoleOptionsForSeason,
+  seasonToProfileValue,
+  type RoleId,
+  type SampleJd,
+  type SeasonId,
+} from "@/lib/sample-jds";
 import type { AnalysisResult } from "@/lib/analysis";
 
 interface AnalyzeResponse extends AnalysisResult {
@@ -81,6 +88,7 @@ export default function AnalyzePage() {
   const router = useRouter();
   const [targetCompany, setTargetCompany] = useState("");
   const [targetRole, setTargetRole] = useState("");
+  const [seasonId, setSeasonId] = useState<SeasonId | "">("");
   const [roleId, setRoleId] = useState<RoleId | "">("");
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [jdText, setJdText] = useState("");
@@ -98,13 +106,31 @@ export default function AnalyzePage() {
     setProfile((current) => ({ ...current, [key]: value }));
   };
 
+  const roleOptions = getRoleOptionsForSeason(seasonId);
+
+  const handleSeasonChange = (next: SeasonId | "") => {
+    setSeasonId(next);
+    setRoleId("");
+    setSelectedSampleId(null);
+    setJdText("");
+    setProfile((current) => ({
+      ...current,
+      preferredDomains: next ? seasonToProfileValue(next) : "",
+    }));
+    if (next === "internship") setTargetRole("SDE Intern (Summer)");
+    else if (next === "placement") setTargetRole("Software Engineer (New Grad)");
+    else if (next === "ps-conversion") setTargetRole("Software Engineer (PS Conversion)");
+    else setTargetRole("");
+  };
+
   const handleRoleChange = (nextRoleId: RoleId | "") => {
     setRoleId(nextRoleId);
     setSelectedSampleId(null);
+    setJdText("");
     if (nextRoleId) {
-      const option = ROLE_OPTIONS.find((role) => role.id === nextRoleId);
+      const option = roleOptions.find((role) => role.id === nextRoleId);
       if (option) setTargetRole(option.label);
-    } else {
+    } else if (!seasonId) {
       setTargetRole("");
     }
   };
@@ -114,6 +140,13 @@ export default function AnalyzePage() {
     setJdText(sample.body);
     setTargetCompany(sample.company);
     setTargetRole(sample.title);
+    if (!seasonId && sample.seasonId) {
+      setSeasonId(sample.seasonId);
+      setProfile((current) => ({
+        ...current,
+        preferredDomains: seasonToProfileValue(sample.seasonId),
+      }));
+    }
     setError(null);
   };
 
@@ -262,6 +295,50 @@ export default function AnalyzePage() {
 
               <label className="group mb-3 block">
                 <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  Season
+                </span>
+                <select
+                  value={seasonId}
+                  onChange={(e) => handleSeasonChange((e.target.value || "") as SeasonId | "")}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
+                >
+                  <option value="">Select season first</option>
+                  {SEASON_OPTIONS.map((season) => (
+                    <option key={season.id} value={season.id}>
+                      {season.label}
+                    </option>
+                  ))}
+                </select>
+                {seasonId && (
+                  <p className="mt-2 text-[11px] leading-4 text-zinc-500">
+                    {SEASON_OPTIONS.find((s) => s.id === seasonId)?.hint}
+                  </p>
+                )}
+              </label>
+
+              <label className="group mb-3 block">
+                <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
+                  <Target className="h-3.5 w-3.5" />
+                  Role
+                </span>
+                <select
+                  value={roleId}
+                  onChange={(e) => handleRoleChange((e.target.value || "") as RoleId | "")}
+                  disabled={!seasonId}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">{seasonId ? "Select desired position" : "Pick season first"}</option>
+                  {roleOptions.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="group mb-3 block">
+                <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
                   <Building2 className="h-3.5 w-3.5" />
                   Company
                 </span>
@@ -273,26 +350,7 @@ export default function AnalyzePage() {
                 />
               </label>
 
-              <label className="group mb-3 block">
-                <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
-                  <Target className="h-3.5 w-3.5" />
-                  Role
-                </span>
-                <select
-                  value={roleId}
-                  onChange={(e) => handleRoleChange((e.target.value || "") as RoleId | "")}
-                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
-                >
-                  <option value="">Select desired position</option>
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {roleId === "" && (
+              {roleId === "" && seasonId && (
                 <label className="group mb-3 block">
                   <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
                     Custom role
@@ -300,7 +358,7 @@ export default function AnalyzePage() {
                   <input
                     value={targetRole}
                     onChange={(e) => setTargetRole(e.target.value)}
-                    placeholder="Or type a custom role title"
+                    placeholder={seasonId === "internship" ? "e.g. Backend Intern, Summer 2026" : "Or type a custom role title"}
                     className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 placeholder:text-zinc-600 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
                   />
                 </label>
@@ -338,23 +396,6 @@ export default function AnalyzePage() {
                   </select>
                 </label>
               </div>
-
-              <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                  Season
-                </span>
-                <select
-                  value={profile.preferredDomains}
-                  onChange={(e) => updateProfile("preferredDomains", e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
-                >
-                  <option value="">Select focus</option>
-                  <option value="Internship season">Internship season</option>
-                  <option value="Placement season">Placement season</option>
-                  <option value="Practice School conversion">Practice School conversion</option>
-                </select>
-              </label>
             </section>
 
             <section className="rounded-[30px] border border-white/10 bg-zinc-950/78 p-5 shadow-xl shadow-black/25 backdrop-blur-xl">
@@ -404,6 +445,7 @@ export default function AnalyzePage() {
                 <div className="mb-3">
                   <SampleJdPicker
                     roleId={roleId}
+                    seasonId={seasonId}
                     selectedId={selectedSampleId}
                     onSelect={handleSampleSelect}
                   />
@@ -414,9 +456,13 @@ export default function AnalyzePage() {
                     setJdText(e.target.value);
                     setSelectedSampleId(null);
                   }}
-                  placeholder={roleId
-                    ? "Pick a sample JD above, or paste your own full JD here."
-                    : "Select a role for sample JDs, or paste any JD. Company + role alone also works."}
+                  placeholder={
+                    seasonId === "internship" && roleId
+                      ? "Pick a summer internship sample above (student-level, 8–14 weeks), or paste a real intern JD."
+                      : seasonId && roleId
+                        ? "Pick a season-matched sample JD above, or paste your own full JD."
+                        : "Select season → role for matched sample JDs, or paste any JD."
+                  }
                   className="min-h-[280px] w-full resize-none rounded-[22px] border border-white/10 bg-[#090a10] p-4 text-sm leading-6 text-zinc-100 outline-none transition-all duration-150 placeholder:text-zinc-600 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
                 />
               </section>
