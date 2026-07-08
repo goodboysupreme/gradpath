@@ -1,0 +1,15 @@
+We are looking for a Senior Full-Stack Engineer to join our team.
+
+Requirements:
+- 5+ years of experience with Python and JavaScript/TypeScript
+- Strong knowledge of React and Next.js
+- Experience with PostgreSQL and Redis
+- Familiarity with AWS, Docker, and Kubernetes
+- Understanding of CI/CD pipelines
+- Experience with GraphQL APIs
+- Knowledge of system design and microservices architecture
+
+Nice to have:
+- Experience with machine learning and NLP
+- Open source contributions
+- Experience with Terraform

@@ -1,0 +1,29 @@
+John Doe
+Software Engineer
+
+Contact: john@example.com | (555) 123-4567
+
+Summary
+Full-stack engineer with 4 years of experience building web applications.
+
+Experience
+Software Engineer at TechCorp (2022-2024)
+- Built web applications using React, Next.js, and TypeScript
+- Developed backend APIs using Node.js and Express
+- Worked with PostgreSQL and MongoDB databases
+- Implemented CI/CD pipelines using GitHub Actions
+
+Junior Developer at StartupCo (2020-2022)
+- Created frontend components using JavaScript and React
+- Used Git for version control
+- Worked with MySQL database
+
+Skills
+Languages: Python, JavaScript, TypeScript, SQL
+Frontend: React, Next.js, HTML, CSS, Tailwind
+Backend: Node.js, Express, REST APIs
+Databases: PostgreSQL, MySQL, MongoDB
+Tools: Git, GitHub, Docker, Linux
+
+Education
+B.S. Computer Science, University of Technology (2020)

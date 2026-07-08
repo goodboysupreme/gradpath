@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build/
+dist/
+
+# env
+.env
+.env.local
+.env*.local
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# misc
+.DS_Store
+*.pem
+.idea/
+.vscode/
+*.tsbuildinfo
+next-env.d.ts
+
+# drizzle
+drizzle/
+.devlogs/
