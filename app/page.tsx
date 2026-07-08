@@ -2,6 +2,8 @@ import { auth, signIn, signOut } from "@/auth";
 import Link from "next/link";
 import { ArrowRight, GraduationCap, History, LockKeyhole, Target } from "lucide-react";
 
+const devBypass = process.env.AUTH_DEV_BYPASS === "true";
+
 export default async function LandingPage() {
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
 
@@ -31,10 +33,19 @@ export default async function LandingPage() {
                 </form>
               </>
             ) : (
-              <form action={async () => { "use server"; await signIn("google", { redirectTo: "/analyze" }); }}>
+              <form
+                action={async () => {
+                  "use server";
+                  if (devBypass) {
+                    await signIn("dev", { redirectTo: "/analyze" });
+                    return;
+                  }
+                  await signIn("google", { redirectTo: "/analyze" });
+                }}
+              >
                 <button className="flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-4 py-2 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
                   <LockKeyhole className="h-4 w-4" />
-                  BITS sign-in
+                  {devBypass ? "Enter (dev)" : "BITS sign-in"}
                 </button>
               </form>
             )}
@@ -60,9 +71,18 @@ export default async function LandingPage() {
                   <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
                 </Link>
               ) : (
-                <form action={async () => { "use server"; await signIn("google", { redirectTo: "/analyze" }); }}>
+                <form
+                  action={async () => {
+                    "use server";
+                    if (devBypass) {
+                      await signIn("dev", { redirectTo: "/analyze" });
+                      return;
+                    }
+                    await signIn("google", { redirectTo: "/analyze" });
+                  }}
+                >
                   <button className="group inline-flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-6 py-4 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
-                    Enter with BITS Google
+                    {devBypass ? "Enter console (dev)" : "Enter with BITS Google"}
                     <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
                   </button>
                 </form>

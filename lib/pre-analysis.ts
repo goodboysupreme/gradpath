@@ -27,42 +27,26 @@ export async function runPreAnalysis(jdText: string, resumeText: string): Promis
 async function callPython(jdText: string, resumeText: string): Promise<PreAnalysis> {
   return new Promise((resolve, reject) => {
     const scriptPath = join(process.cwd(), "scripts", "pre_analyze.py");
-    const input = JSON.stringify({ jd_text: jdText, resume_text: resumeText });
-    // We pass input via a temp file to avoid stdin encoding issues on Windows
     const tmpDir = mkdtempSync(join(tmpdir(), "preanalyze-"));
-    const inputPath = join(tmpDir, "input.json");
     const outputPath = join(tmpDir, "output.json");
-    writeFileSync(inputPath, input, "utf-8");
-
-    // Try python, python3, and py in order
-    const py = process.platform === "win32" ? "python" : "python3";
-
-    const child = spawn(
-      py,
-      [scriptPath, "--jd-file", inputPath, "--resume-file", inputPath, "-o", outputPath],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-
-    // Wait — we passed the same file for both jd and resume. That's wrong.
-    // Instead, let's use stdin approach with a wrapper.
-    child.kill();
-
-    // Restart with proper approach: separate files
     const jdPath = join(tmpDir, "jd.txt");
     const resumePath = join(tmpDir, "resume.txt");
     writeFileSync(jdPath, jdText, "utf-8");
     writeFileSync(resumePath, resumeText, "utf-8");
 
-    const child2 = spawn(
+    const py = process.platform === "win32" ? "python" : "python3";
+    const child = spawn(
       py,
       [scriptPath, "--jd-file", jdPath, "--resume-file", resumePath, "-o", outputPath],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
 
     let stderr = "";
-    child2.stderr.on("data", (d) => { stderr += d.toString(); });
+    child.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
 
-    child2.on("close", (code) => {
+    child.on("close", (code) => {
       try {
         if (code !== 0) {
           reject(new Error(`Python exited ${code}: ${stderr}`));
@@ -70,7 +54,6 @@ async function callPython(jdText: string, resumeText: string): Promise<PreAnalys
         }
         const output = readFileSync(outputPath, "utf-8");
         const result = JSON.parse(output) as PreAnalysis;
-        // Validate
         if (!result || typeof result.rough_match_percentage !== "number") {
           reject(new Error("Invalid pre-analysis output"));
           return;
@@ -83,7 +66,7 @@ async function callPython(jdText: string, resumeText: string): Promise<PreAnalys
       }
     });
 
-    child2.on("error", (e) => {
+    child.on("error", (e) => {
       rmSync(tmpDir, { recursive: true, force: true });
       reject(e);
     });
