@@ -1,4 +1,4 @@
-import { getDocumentProxy, extractPDFText } from "unpdf";
+import { extractText, getDocumentProxy } from "unpdf";
 
 export interface PdfResult {
   text: string;
@@ -39,12 +39,17 @@ export async function extractPdfText(
   }
 
   try {
+    // unpdf 1.x ships a serverless PDF.js build with the worker inlined —
+    // required on Vercel (no separate pdf.worker.js on the filesystem).
     const pdf = await getDocumentProxy(new Uint8Array(buffer));
-    const { text, totalPages } = await extractPDFText(pdf, { mergePages: true });
-    const textStr = Array.isArray(text) ? text.join("\n") : (text ?? "");
+    const { text, totalPages } = await extractText(pdf, { mergePages: true });
+    const textStr = text.trim();
 
-    if (!textStr.trim()) {
-      throw new PdfError("No extractable text found. If this is a scanned resume, upload a PNG/JPG image or paste the text.", "EMPTY_TEXT");
+    if (!textStr) {
+      throw new PdfError(
+        "No extractable text found. If this is a scanned resume, upload a PNG/JPG image or paste the text.",
+        "EMPTY_TEXT",
+      );
     }
 
     return { text: truncateText(textStr), pageCount: totalPages, sourceType: "pdf" };
