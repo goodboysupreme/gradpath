@@ -5,6 +5,7 @@ import { analyses, studentProfiles } from "@/db/schema";
 import { extractResumeText, PdfError } from "@/lib/pdf";
 import { runPreAnalysis } from "@/lib/pre-analysis";
 import { analysisResultSchema, buildUserPrompt, SYSTEM_PROMPT, type PreAnalysis } from "@/lib/analysis";
+import { resolveUserId } from "@/lib/guest-user";
 import { sql, gte, and, eq } from "drizzle-orm";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -145,18 +146,19 @@ async function saveStudentProfile(userId: string, context: StudentContext) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // Auth temporarily open: use session user when present, else shared guest.
+  const session = await auth().catch(() => null);
+  const userId = await resolveUserId(session?.user?.id);
 
-  const userId = session.user.id;
-  const { used, limit } = await getDailyLimit(userId);
-  if (used >= limit) {
-    return NextResponse.json(
-      { error: `Daily limit reached (${used}/${limit}). Try again tomorrow.` },
-      { status: 429 },
-    );
+  // Only enforce daily limit for real signed-in users (not the shared guest).
+  if (session?.user?.id) {
+    const { used, limit } = await getDailyLimit(userId);
+    if (used >= limit) {
+      return NextResponse.json(
+        { error: `Daily limit reached (${used}/${limit}). Try again tomorrow.` },
+        { status: 429 },
+      );
+    }
   }
 
   let jdText = "";

@@ -5,7 +5,7 @@ BITS Pilani placement readiness tool. Point at a company + role, drop a resume (
 ## Stack
 
 - **Next.js 15** (App Router) + React 19 + Tailwind 4
-- **Auth.js** (Google, BITS-domain gate)
+- **Auth paused** — open access via shared guest user (Auth.js still in repo for later)
 - **Neon Postgres** + Drizzle ORM
 - **OpenRouter** for LLM analysis
 - **Python** pre-analysis (keyword overlap) with JS fallback
@@ -23,11 +23,10 @@ Fill `.env.local`:
 
 | Var | Where |
 |-----|--------|
-| `AUTH_SECRET` | `openssl rand -base64 32` (or any long random string) |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | [Google Cloud Console](https://console.cloud.google.com/) OAuth client. Redirect URI: `http://localhost:3000/api/auth/callback/google` |
 | `DATABASE_URL` | [Neon](https://neon.tech) Postgres connection string |
 | `OPENROUTER_API_KEY` | [OpenRouter](https://openrouter.ai/keys) |
-| `BITS_ALLOWED_DOMAINS` | default `bits-pilani.ac.in` |
+| `AUTH_SECRET` | optional for now (auth paused) |
+| `AUTH_GOOGLE_*` | leave empty until you re-enable sign-in |
 
 Push schema:
 

@@ -1,12 +1,7 @@
-import { auth, signIn, signOut } from "@/auth";
 import Link from "next/link";
-import { ArrowRight, GraduationCap, History, LockKeyhole, Target } from "lucide-react";
+import { ArrowRight, GraduationCap, History, Target } from "lucide-react";
 
-const devBypass = process.env.AUTH_DEV_BYPASS === "true";
-
-export default async function LandingPage() {
-  const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
-
+export default function LandingPage() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#07080d] text-zinc-100">
       <div className="app-grid-bg fixed inset-0 -z-10" />
@@ -20,35 +15,13 @@ export default async function LandingPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {session ? (
-              <>
-                <Link href="/history" className="hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300 transition-all duration-150 hover:border-white/20 hover:text-white sm:flex">
-                  <History className="h-4 w-4" />
-                  History
-                </Link>
-                <form action={async () => { "use server"; await signOut({ redirectTo: "/" }); }}>
-                  <button className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-400 transition-all duration-150 hover:border-rose-300/30 hover:text-rose-200">
-                    Sign out
-                  </button>
-                </form>
-              </>
-            ) : (
-              <form
-                action={async () => {
-                  "use server";
-                  if (devBypass) {
-                    await signIn("dev", { redirectTo: "/analyze" });
-                    return;
-                  }
-                  await signIn("google", { redirectTo: "/analyze" });
-                }}
-              >
-                <button className="flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-4 py-2 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
-                  <LockKeyhole className="h-4 w-4" />
-                  {devBypass ? "Enter (dev)" : "BITS sign-in"}
-                </button>
-              </form>
-            )}
+            <Link href="/history" className="hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-zinc-300 transition-all duration-150 hover:border-white/20 hover:text-white sm:flex">
+              <History className="h-4 w-4" />
+              History
+            </Link>
+            <Link href="/analyze" className="flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-4 py-2 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
+              Open console
+            </Link>
           </div>
         </nav>
 
@@ -56,7 +29,7 @@ export default async function LandingPage() {
           <div className="rounded-[38px] border border-white/10 bg-zinc-950/78 p-6 shadow-2xl shadow-black/35 backdrop-blur-xl sm:p-8 lg:p-10">
             <div className="mb-12 inline-flex items-center gap-2 rounded-full border border-[#e1ff5f]/25 bg-[#e1ff5f]/8 px-3 py-1 text-xs font-medium text-[#e1ff5f]">
               <GraduationCap className="h-3.5 w-3.5" />
-              BE and MTech access
+              BE and MTech · open access
             </div>
             <h1 className="max-w-4xl text-5xl font-black leading-[0.95] tracking-[-0.04em] text-white sm:text-7xl lg:text-8xl">
               Point at a company. Get the path.
@@ -65,28 +38,10 @@ export default async function LandingPage() {
               Company, role, resume or no resume. GradPath turns that into gaps, projects, prep topics, bullets, and a placement-season attack plan.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
-              {session ? (
-                <Link href="/analyze" className="group inline-flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-6 py-4 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
-                  Open console
-                  <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
-                </Link>
-              ) : (
-                <form
-                  action={async () => {
-                    "use server";
-                    if (devBypass) {
-                      await signIn("dev", { redirectTo: "/analyze" });
-                      return;
-                    }
-                    await signIn("google", { redirectTo: "/analyze" });
-                  }}
-                >
-                  <button className="group inline-flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-6 py-4 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
-                    {devBypass ? "Enter console (dev)" : "Enter with BITS Google"}
-                    <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
-                  </button>
-                </form>
-              )}
+              <Link href="/analyze" className="group inline-flex items-center gap-2 rounded-2xl bg-[#e1ff5f] px-6 py-4 text-sm font-black text-zinc-950 transition-all duration-150 hover:scale-[1.01] hover:bg-[#f0ff99]">
+                Open console
+                <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
+              </Link>
               <Link href="/history" className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-4 text-sm font-medium text-zinc-300 transition-all duration-150 hover:border-white/20 hover:text-white">
                 <History className="h-4 w-4" />
                 History
@@ -116,10 +71,10 @@ export default async function LandingPage() {
             </div>
 
             <div className="rounded-[34px] border border-white/10 bg-zinc-950/78 p-6 shadow-xl shadow-black/25 backdrop-blur-xl">
-              <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500">Restriction</p>
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-white">BITS-only gate</p>
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500">Access</p>
+              <p className="mt-4 text-2xl font-semibold tracking-tight text-white">No sign-in required</p>
               <p className="mt-3 text-sm leading-6 text-zinc-400">
-                Google sign-in is restricted by allowed institutional email domains in the app config.
+                Auth is paused for now. Jump straight into the console — BITS gate can come back later.
               </p>
             </div>
           </aside>

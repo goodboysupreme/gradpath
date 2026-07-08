@@ -28,6 +28,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     : undefined,
   session: { strategy: "jwt" },
   providers: [
+    // Placeholder so Auth.js can boot while Google sign-in is paused.
+    Credentials({
+      id: "noop",
+      name: "noop",
+      credentials: {},
+      authorize: () => null,
+    }),
     ...(hasGoogle
       ? [
           Google({

@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { analyses } from "@/db/schema";
+import { resolveUserId } from "@/lib/guest-user";
 import { eq, and } from "drizzle-orm";
 import { ArrowLeft, Plus } from "lucide-react";
 import Link from "next/link";
@@ -9,16 +10,14 @@ import { ResultPanels } from "@/components/result-panels";
 import type { AnalysisResult } from "@/lib/analysis";
 
 export default async function HistoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return <div className="min-h-screen bg-[#07080d] p-8 text-center text-zinc-400">Please sign in.</div>;
-  }
+  const session = await auth().catch(() => null);
+  const userId = await resolveUserId(session?.user?.id);
 
   const { id } = await params;
   const [row] = await db
     .select()
     .from(analyses)
-    .where(and(eq(analyses.id, id), eq(analyses.userId, session.user.id)))
+    .where(and(eq(analyses.id, id), eq(analyses.userId, userId)))
     .limit(1);
 
   if (!row) {

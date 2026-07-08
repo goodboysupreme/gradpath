@@ -1,15 +1,14 @@
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { analyses } from "@/db/schema";
+import { resolveUserId } from "@/lib/guest-user";
 import { desc, eq } from "drizzle-orm";
 import { ArrowLeft, FileClock, Plus } from "lucide-react";
 import Link from "next/link";
 
 export default async function HistoryPage() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return <div className="min-h-screen bg-[#07080d] p-8 text-center text-zinc-400">Please sign in.</div>;
-  }
+  const session = await auth().catch(() => null);
+  const userId = await resolveUserId(session?.user?.id);
 
   const rows = await db
     .select({
@@ -22,7 +21,7 @@ export default async function HistoryPage() {
       resumeFilename: analyses.resumeFilename,
     })
     .from(analyses)
-    .where(eq(analyses.userId, session.user.id))
+    .where(eq(analyses.userId, userId))
     .orderBy(desc(analyses.createdAt))
     .limit(50);
 
