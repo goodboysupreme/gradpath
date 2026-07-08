@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -20,6 +20,9 @@ import {
 import { ScoreRing } from "@/components/score-ring";
 import { UsageBadge } from "@/components/usage-badge";
 import { ResultPanels } from "@/components/result-panels";
+import { ResumeDropzone } from "@/components/resume-dropzone";
+import { SampleJdPicker } from "@/components/sample-jd-picker";
+import { ROLE_OPTIONS, type RoleId, type SampleJd } from "@/lib/sample-jds";
 import type { AnalysisResult } from "@/lib/analysis";
 
 interface AnalyzeResponse extends AnalysisResult {
@@ -74,18 +77,12 @@ const intakeModes = [
   { id: "profile" as const, label: "No resume", icon: UserRound },
 ];
 
-const MAX_RESUME_FILE_BYTES = 5 * 1024 * 1024;
-const SUPPORTED_RESUME_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".bmp"];
-
-function isSupportedResumeFile(file: File) {
-  const name = file.name.toLowerCase();
-  return SUPPORTED_RESUME_EXTENSIONS.some((extension) => name.endsWith(extension));
-}
-
 export default function AnalyzePage() {
   const router = useRouter();
   const [targetCompany, setTargetCompany] = useState("");
   const [targetRole, setTargetRole] = useState("");
+  const [roleId, setRoleId] = useState<RoleId | "">("");
+  const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [jdText, setJdText] = useState("");
   const [resumeText, setResumeText] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -96,46 +93,33 @@ export default function AnalyzePage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateProfile = (key: keyof StudentProfile, value: string) => {
     setProfile((current) => ({ ...current, [key]: value }));
   };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    if (file.size > MAX_RESUME_FILE_BYTES) {
-      setError("Keep the resume file under 5MB.");
-      return;
-    }
-    if (isSupportedResumeFile(file)) {
-      setResumeFile(file);
-      setResumeFilename(file.name);
-      setError(null);
+  const handleRoleChange = (nextRoleId: RoleId | "") => {
+    setRoleId(nextRoleId);
+    setSelectedSampleId(null);
+    if (nextRoleId) {
+      const option = ROLE_OPTIONS.find((role) => role.id === nextRoleId);
+      if (option) setTargetRole(option.label);
     } else {
-      setError("Drop a PDF, PNG, JPG, JPEG, or BMP resume.");
+      setTargetRole("");
     }
-  }, []);
+  };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > MAX_RESUME_FILE_BYTES) {
-        setError("Keep the resume file under 5MB.");
-        return;
-      }
-      if (!isSupportedResumeFile(file)) {
-        setError("Upload a PDF, PNG, JPG, JPEG, or BMP resume.");
-        return;
-      }
-      setResumeFile(file);
-      setResumeFilename(file.name);
-      setError(null);
-    }
+  const handleSampleSelect = (sample: SampleJd) => {
+    setSelectedSampleId(sample.id);
+    setJdText(sample.body);
+    setTargetCompany(sample.company);
+    setTargetRole(sample.title);
+    setError(null);
+  };
+
+  const handleResumeFile = (file: File | null) => {
+    setResumeFile(file);
+    setResumeFilename(file?.name ?? null);
   };
 
   const profileReady = [profile.degree, profile.branch, profile.skills, profile.projects || profile.courses]
@@ -260,13 +244,33 @@ export default function AnalyzePage() {
                   <Target className="h-3.5 w-3.5" />
                   Role
                 </span>
-                <input
-                  value={targetRole}
-                  onChange={(e) => setTargetRole(e.target.value)}
-                  placeholder="SDE Intern, Quant, ML Engineer"
-                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 placeholder:text-zinc-600 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
-                />
+                <select
+                  value={roleId}
+                  onChange={(e) => handleRoleChange((e.target.value || "") as RoleId | "")}
+                  className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
+                >
+                  <option value="">Select desired position</option>
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
               </label>
+
+              {roleId === "" && (
+                <label className="group mb-3 block">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-400">
+                    Custom role
+                  </span>
+                  <input
+                    value={targetRole}
+                    onChange={(e) => setTargetRole(e.target.value)}
+                    placeholder="Or type a custom role title"
+                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition-all duration-150 placeholder:text-zinc-600 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
+                  />
+                </label>
+              )}
 
               <div className="mb-3 grid grid-cols-2 gap-3">
                 <label className="block">
@@ -360,14 +364,26 @@ export default function AnalyzePage() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
               <section className="rounded-[26px] border border-white/10 bg-black/24 p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-200">Role brief</label>
+                  <label className="text-sm font-medium text-zinc-200">Role brief / JD</label>
                   <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-500">{jdText.length} chars</span>
+                </div>
+                <div className="mb-3">
+                  <SampleJdPicker
+                    roleId={roleId}
+                    selectedId={selectedSampleId}
+                    onSelect={handleSampleSelect}
+                  />
                 </div>
                 <textarea
                   value={jdText}
-                  onChange={(e) => setJdText(e.target.value)}
-                  placeholder="Paste the JD. Company + role is enough for a first pass."
-                  className="min-h-[430px] w-full resize-none rounded-[22px] border border-white/10 bg-[#090a10] p-4 text-sm leading-6 text-zinc-100 outline-none transition-all duration-150 placeholder:text-zinc-600 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
+                  onChange={(e) => {
+                    setJdText(e.target.value);
+                    setSelectedSampleId(null);
+                  }}
+                  placeholder={roleId
+                    ? "Pick a sample JD above, or paste your own full JD here."
+                    : "Select a role for sample JDs, or paste any JD. Company + role alone also works."}
+                  className="min-h-[280px] w-full resize-none rounded-[22px] border border-white/10 bg-[#090a10] p-4 text-sm leading-6 text-zinc-100 outline-none transition-all duration-150 placeholder:text-zinc-600 focus:border-[#e1ff5f]/50 focus:ring-4 focus:ring-[#e1ff5f]/10"
                 />
               </section>
 
@@ -387,42 +403,12 @@ export default function AnalyzePage() {
                 </div>
 
                 {resumeMode === "upload" && (
-                  <div
-                    onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`grid min-h-[430px] cursor-pointer place-items-center rounded-[22px] border border-dashed p-6 text-center transition-all duration-150 ${
-                      dragging
-                        ? "border-[#e1ff5f] bg-[#e1ff5f]/8"
-                        : "border-white/15 bg-[#090a10] hover:border-[#e1ff5f]/50 hover:bg-white/[0.03]"
-                    }`}
-                  >
-                    {resumeFilename ? (
-                      <div>
-                        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-[#e1ff5f] text-zinc-950">
-                          <FileText className="h-7 w-7" />
-                        </div>
-                        <div className="text-sm font-medium text-white">{resumeFilename}</div>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setResumeFile(null); setResumeFilename(null); }}
-                          className="mt-3 text-xs text-rose-300 transition-colors duration-150 hover:text-rose-200"
-                        >
-                          Remove file
-                        </button>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl border border-white/10 bg-white/[0.03] text-[#e1ff5f]">
-                          <Upload className="h-7 w-7" />
-                        </div>
-                        <div className="text-sm font-medium text-white">Drop PDF or image resume</div>
-                        <div className="mt-1 text-xs text-zinc-500">PDF text parser + open-source OCR, max 5MB</div>
-                      </div>
-                    )}
-                    <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.bmp" onChange={handleFileSelect} className="hidden" />
-                  </div>
+                  <ResumeDropzone
+                    file={resumeFile}
+                    filename={resumeFilename}
+                    onFile={handleResumeFile}
+                    onError={setError}
+                  />
                 )}
 
                 {resumeMode === "paste" && (
