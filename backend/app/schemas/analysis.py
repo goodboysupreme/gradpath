@@ -1,24 +1,14 @@
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import ConfigDict, Field, model_validator
-from pydantic.alias_generators import to_camel
+from pydantic import Field, model_validator
 
-from app.schemas.base import ContractModel
+from app.schemas.base import CamelContractModel, ContractModel
 from app.schemas.domain import CareerTrack
 
 SkillLabel = Annotated[str, Field(min_length=2, max_length=160)]
 AdviceText = Annotated[str, Field(min_length=2, max_length=500)]
 BulletText = Annotated[str, Field(min_length=8, max_length=500)]
-
-
-class CamelContractModel(ContractModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        validate_by_alias=True,
-        validate_by_name=True,
-        serialize_by_alias=True,
-    )
 
 
 class IntakeMode(StrEnum):

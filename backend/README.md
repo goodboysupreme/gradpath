@@ -4,7 +4,8 @@ Contract-first FastAPI backend for GradPath's SI, PS-II, placement, and off-camp
 
 The backend is deliberately stateless at this stage. It provides domain contracts, the BITS
 Superset resume template, evidence-linked requirement coverage, and grounded resume/JD analysis
-without changing the existing Next.js or Drizzle runtime.
+plus private native-text document extraction without changing the existing Next.js or Drizzle
+runtime.
 
 ## Run locally
 
@@ -33,6 +34,25 @@ Open `http://localhost:8000/docs` for the generated API documentation.
 | `GET` | `/api/v1/resume-templates/bits-superset-v1` | BITS Superset one-page template contract |
 | `POST` | `/api/v1/coverage/evaluate` | Evidence-linked JD requirement coverage |
 | `POST` | `/api/v1/analyses/evaluate` | Internal, evidence-grounded resume/JD readiness analysis |
+| `POST` | `/api/v1/documents/extract` | Internal PDF/DOCX native-text extraction |
+
+## Private document extraction
+
+`POST /api/v1/documents/extract` accepts exactly one multipart `kind` (`resume` or `jd`) and one
+PDF or DOCX `file`. It requires the internal-token header, authenticates before parsing the form,
+and returns `Cache-Control: no-store`. Upload bytes are capped at 10 MiB from the data actually
+read; PDF limits are 10 resume pages and 30 JD pages; normalized output is capped at 250,000
+characters. DOCX `pageCount` is `null` because OOXML does not contain reliable rendered
+pagination.
+
+Extraction is native text only and explicitly reports `layoutPreserved: false`; scanned or
+image-only PDFs return a sanitized OCR-required error. Files are not durably persisted, although
+Starlette may spool larger multipart uploads to temporary disk until the request closes. Parser
+work runs in a cancellable, time-bounded worker process behind a two-job capacity gate. DOCX
+packages are checked for exact OOXML content type, traversal, encryption, macros, embedded/ActiveX
+payloads, dangerous XML declarations, duplicate members, unsupported compression, and archive
+expansion limits before parsing. The deployment proxy must enforce the same whole-request limit,
+disable request-body logging/caching, authorize the student session, and apply per-user quotas.
 
 ## Grounded analysis
 

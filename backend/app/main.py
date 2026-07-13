@@ -5,22 +5,34 @@ from app.api.dependencies import get_analysis_provider
 from app.api.v1.health import router as health_router
 from app.api.v1.router import router as v1_router
 from app.config import Settings, get_settings
+from app.middleware.document_body_limit import DocumentBodyLimitMiddleware
 from app.providers.base import AnalysisProvider
+from app.services.document_executor import DocumentExtractionExecutor
+from app.services.documents import MAX_REQUEST_BODY_BYTES
 
 
 def create_app(
     *,
     settings: Settings | None = None,
     analysis_provider: AnalysisProvider | None = None,
+    document_extraction_executor: DocumentExtractionExecutor | None = None,
 ) -> FastAPI:
     active_settings = settings or get_settings()
     app = FastAPI(title=active_settings.app_name, version=active_settings.app_version)
+    app.state.document_extraction_executor = (
+        document_extraction_executor or DocumentExtractionExecutor()
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(active_settings.cors_origins),
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
+    )
+    app.add_middleware(
+        DocumentBodyLimitMiddleware,
+        path="/api/v1/documents/extract",
+        max_body_bytes=MAX_REQUEST_BODY_BYTES,
     )
     app.include_router(health_router, prefix="/health", tags=["health"])
     app.include_router(v1_router, prefix="/api/v1")

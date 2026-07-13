@@ -17,7 +17,12 @@ DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingm
 MAX_FILE_BYTES = 10 * 1024 * 1024
 
 
-def make_pdf(page_texts: list[str], *, password: str | None = None) -> bytes:
+def make_pdf(
+    page_texts: list[str],
+    *,
+    password: str | None = None,
+    attachment: bytes | None = None,
+) -> bytes:
     writer = PdfWriter()
     font = DictionaryObject(
         {
@@ -38,6 +43,8 @@ def make_pdf(page_texts: list[str], *, password: str | None = None) -> bytes:
 
     if password is not None:
         writer.encrypt(password)
+    if attachment is not None:
+        writer.add_attachment("padding.bin", attachment)
 
     buffer = BytesIO()
     writer.write(buffer)
@@ -65,13 +72,20 @@ def make_zip(entries: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def pad_pdf_to_size(content: bytes, size: int) -> bytes:
-    marker_index = content.rfind(b"%%EOF")
-    padding_size = size - len(content)
-    assert marker_index >= 0
-    assert padding_size >= 2
-    padding = b"%" + b"x" * (padding_size - 2) + b"\n"
-    return content[:marker_index] + padding + content[marker_index:]
+def read_zip_entries(content: bytes) -> dict[str, bytes]:
+    with ZipFile(BytesIO(content)) as archive:
+        return {info.filename: archive.read(info) for info in archive.infolist()}
+
+
+def make_pdf_at_size(page_texts: list[str], size: int) -> bytes:
+    payload_size = size - len(make_pdf(page_texts)) - 1_024
+    for _ in range(5):
+        content = make_pdf(page_texts, attachment=b"x" * payload_size)
+        difference = size - len(content)
+        if difference == 0:
+            return content
+        payload_size += difference
+    raise AssertionError("could not construct an exact-size PDF fixture")
 
 
 def post_document(
@@ -122,6 +136,7 @@ def test_extracts_native_pdf_text() -> None:
     assert result["extractionMethod"] == "native_text"
     assert result["layoutPreserved"] is False
     assert result["extractionVersion"] == "native-text-v1"
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 def test_extracts_docx_paragraphs_and_tables_in_document_order() -> None:
@@ -201,6 +216,7 @@ def test_document_extraction_rejects_unsupported_type() -> None:
 
     assert response.status_code == 415
     assert response.json() == {"detail": "Unsupported document type"}
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 def test_document_extraction_rejects_mismatched_magic_bytes() -> None:
@@ -228,8 +244,8 @@ def test_document_extraction_rejects_files_over_ten_mibibytes() -> None:
 
 
 def test_document_extraction_accepts_a_file_at_exact_size_limit() -> None:
-    content = pad_pdf_to_size(
-        make_pdf(["A native-text PDF exactly at the accepted file-size boundary."]),
+    content = make_pdf_at_size(
+        ["A native-text PDF exactly at the accepted file-size boundary."],
         MAX_FILE_BYTES,
     )
 
@@ -345,10 +361,9 @@ def test_document_extraction_rejects_generic_zip_disguised_as_docx() -> None:
 
 
 def test_document_extraction_rejects_archive_expansion_bomb() -> None:
-    content = make_docx("Ordinary document text with a malicious compressed member.")
-    source = ZipFile(BytesIO(content))
-    entries = {info.filename: source.read(info) for info in source.infolist()}
-    source.close()
+    entries = read_zip_entries(
+        make_docx("Ordinary document text with a malicious compressed member.")
+    )
     entries["word/media/padding.txt"] = b"0" * (2 * 1024 * 1024)
 
     response = post_document(
@@ -361,8 +376,51 @@ def test_document_extraction_rejects_archive_expansion_bomb() -> None:
     assert response.json() == {"detail": "Document archive exceeds safe expansion limits"}
 
 
+def test_document_extraction_rejects_archive_path_traversal() -> None:
+    entries = read_zip_entries(make_docx("Ordinary document text."))
+    entries["../outside.xml"] = b"<outside />"
+
+    response = post_document(
+        make_zip(entries),
+        filename="traversal.docx",
+        media_type=DOCX_MEDIA_TYPE,
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Document package is unsafe"}
+
+
+def test_document_extraction_rejects_macro_payloads() -> None:
+    entries = read_zip_entries(make_docx("Ordinary document text."))
+    entries["word/vbaProject.bin"] = b"macro payload"
+
+    response = post_document(
+        make_zip(entries),
+        filename="macro.docx",
+        media_type=DOCX_MEDIA_TYPE,
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Document package is unsafe"}
+
+
+def test_document_extraction_accepts_exact_character_limit() -> None:
+    large_text = "".join(f"{index:08x}" for index in range(31_250))
+    content = make_docx(large_text)
+
+    response = post_document(
+        content,
+        filename="maximum-text.docx",
+        media_type=DOCX_MEDIA_TYPE,
+        kind="jd",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["characterCount"] == 250_000
+
+
 def test_document_extraction_enforces_character_limit() -> None:
-    large_text = "".join(f"{index:08x}" for index in range(31_251))
+    large_text = "".join(f"{index:08x}" for index in range(31_251))[:250_001]
     content = make_docx(large_text)
 
     response = post_document(

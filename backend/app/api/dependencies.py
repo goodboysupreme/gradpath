@@ -1,11 +1,12 @@
 from secrets import compare_digest
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.config import Settings, get_settings
 from app.providers.base import AnalysisProvider
 from app.providers.openrouter import OpenRouterAnalysisProvider
+from app.services.document_executor import DocumentExtractionExecutor
 
 MIN_INTERNAL_TOKEN_LENGTH = 32
 
@@ -14,6 +15,11 @@ def get_analysis_provider(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AnalysisProvider:
     return OpenRouterAnalysisProvider(settings)
+
+
+def get_document_extraction_executor(request: Request) -> DocumentExtractionExecutor:
+    executor: DocumentExtractionExecutor = request.app.state.document_extraction_executor
+    return executor
 
 
 def require_internal_authentication(
