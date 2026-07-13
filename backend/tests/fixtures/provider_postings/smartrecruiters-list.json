@@ -1,0 +1,23 @@
+{
+  "fixtureNotice": "Synthetic schema-shaped test data",
+  "totalFound": 1,
+  "content": [
+    {
+      "id": "smart-example-1",
+      "name": "Platform Engineer",
+      "company": {
+        "name": "Example Systems"
+      },
+      "releasedDate": "2026-07-04T10:00:00Z",
+      "location": {
+        "city": "Bengaluru",
+        "region": "Karnataka",
+        "country": "India"
+      },
+      "typeOfEmployment": {
+        "label": "Full-time"
+      },
+      "ref": "https://api.smartrecruiters.com/v1/companies/example/postings/smart-example-1"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "fixtureNotice": "Synthetic schema-shaped test data",
+  "id": "smart-example-1",
+  "active": true,
+  "applyUrl": "https://www.smartrecruiters.com/ExampleSystems/platform-engineer",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p>Example Systems builds dependable tools for students and universities.</p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>Design typed APIs and operate reliable platform services.</p><script>doNotLeak()</script>"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>Strong Python fundamentals.</li><li>Experience writing automated tests.</li></ul>"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>Hybrid work with structured mentorship and regular code review.</p>"
+      }
+    }
+  }
+}
