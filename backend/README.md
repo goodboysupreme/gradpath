@@ -4,8 +4,8 @@ Contract-first FastAPI backend for GradPath's SI, PS-II, placement, and off-camp
 
 The backend is deliberately stateless at this stage. It provides domain contracts, the BITS
 Superset resume template, evidence-linked requirement coverage, and grounded resume/JD analysis
-plus private native-text document extraction without changing the existing Next.js or Drizzle
-runtime.
+plus private native-text document extraction and permission-aware JD normalization without
+changing the existing Next.js or Drizzle runtime.
 
 ## Run locally
 
@@ -22,6 +22,10 @@ before enabling AI analysis. A blank token, key, or model keeps the route unavai
 internal token belongs only in the Next.js server route; never expose it through a
 `NEXT_PUBLIC_*` variable or browser request.
 
+Set a different random `GRADPATH_API_SOURCE_INGESTION_TOKEN` of at least 32 characters only for
+trusted campus/ATS connector jobs. It must not be available to the user-facing Next.js proxy.
+Privileged source normalization fails closed when this second credential is absent.
+
 Open `http://localhost:8000/docs` for the generated API documentation.
 
 ## Current endpoints
@@ -35,6 +39,33 @@ Open `http://localhost:8000/docs` for the generated API documentation.
 | `POST` | `/api/v1/coverage/evaluate` | Evidence-linked JD requirement coverage |
 | `POST` | `/api/v1/analyses/evaluate` | Internal, evidence-grounded resume/JD readiness analysis |
 | `POST` | `/api/v1/documents/extract` | Internal PDF/DOCX native-text extraction |
+| `GET` | `/api/v1/job-sources` | Source registry, integration status, and acquisition policy |
+| `POST` | `/api/v1/job-descriptions/normalize` | Internal provenance validation and deterministic JD normalization |
+
+## Authorized JD sources
+
+`GET /api/v1/job-sources` is a declarative registry, not a crawler. It records user uploads,
+authorized campus imports, synthetic practice content, and planned official API adapters for
+Greenhouse, Lever, Ashby, and SmartRecruiters. The policy forbids authenticated-page scraping and
+token discovery. Provider adapters remain `planned`; this endpoint performs no network requests.
+
+`POST /api/v1/job-descriptions/normalize` requires the internal API token. The user-facing proxy
+may submit only `user_upload`; the backend derives `user_private`, `user_asserted`, and
+`private_analysis_only`. Campus, synthetic, and official-provider records additionally require the
+separate source-ingestion credential. Their access, verification, and catalog eligibility are
+derived by the backend rather than accepted from request fields, and connector schema versions are
+allowlisted per source. A campus authorization reference is bounded, treated as secret audit
+evidence, omitted from output and fingerprints, and protected by route-scoped sanitized validation
+responses. The raw JSON request is capped at 1 MiB before parsing.
+
+Provider source URLs must be canonical HTTPS URLs on the declared provider host and are never
+fetched by the normalizer. Ashby identities must contain the declared account and a posting path;
+application links cannot target local, private, or reserved IP space. Synthetic practice records
+cannot contain application/source URLs or live publication/deadline metadata. Normalized content
+uses Unicode NFKC plus whitespace and case normalization inside a versioned, domain-separated
+canonical JSON SHA-256 fingerprint. The public fingerprint is content metadata, not proof of
+authenticity or an authorization primitive. Future persistence must scope private deduplication by
+authenticated owner and campus deduplication by a trusted campus identifier.
 
 ## Private document extraction
 

@@ -4,21 +4,23 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
-class _DocumentRequestBodyTooLarge(OSError):
+class _RequestBodyTooLarge(OSError):
     pass
 
 
-class DocumentBodyLimitMiddleware:
+class RequestBodyLimitMiddleware:
     def __init__(
         self,
         app: ASGIApp,
         *,
         path: str,
         max_body_bytes: int,
+        detail: str,
     ) -> None:
         self._app = app
         self._path = path
         self._max_body_bytes = max_body_bytes
+        self._detail = detail
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope.get("path") != self._path:
@@ -47,7 +49,7 @@ class DocumentBodyLimitMiddleware:
                 body = cast(bytes, message.get("body", b""))
                 received_bytes += len(body)
                 if received_bytes > self._max_body_bytes:
-                    raise _DocumentRequestBodyTooLarge
+                    raise _RequestBodyTooLarge
             return message
 
         async def no_store_send(message: Message) -> None:
@@ -62,16 +64,31 @@ class DocumentBodyLimitMiddleware:
 
         try:
             await self._app(scope, bounded_receive, no_store_send)
-        except _DocumentRequestBodyTooLarge:
+        except _RequestBodyTooLarge:
             if response_started:
                 raise
             await self._reject(scope, receive, no_store_send)
 
-    @staticmethod
-    async def _reject(scope: Scope, receive: Receive, send: Send) -> None:
+    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
         response = JSONResponse(
             status_code=413,
-            content={"detail": "Request body exceeds the document upload limit"},
+            content={"detail": self._detail},
             headers={"Cache-Control": "no-store"},
         )
         await response(scope, receive, send)
+
+
+class DocumentBodyLimitMiddleware(RequestBodyLimitMiddleware):
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        path: str,
+        max_body_bytes: int,
+    ) -> None:
+        super().__init__(
+            app,
+            path=path,
+            max_body_bytes=max_body_bytes,
+            detail="Request body exceeds the document upload limit",
+        )

@@ -43,3 +43,25 @@ def require_internal_authentication(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Internal authentication failed",
         )
+
+
+def verify_source_ingestion_authentication(
+    settings: Settings,
+    source_ingestion_token: str | None,
+) -> None:
+    configured_secret = settings.source_ingestion_token
+    configured_token = (
+        configured_secret.get_secret_value().strip() if configured_secret is not None else ""
+    )
+    if len(configured_token) < MIN_INTERNAL_TOKEN_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Source ingestion authentication is not configured",
+            headers={"Cache-Control": "no-store"},
+        )
+    if not compare_digest(source_ingestion_token or "", configured_token):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Source ingestion authorization failed",
+            headers={"Cache-Control": "no-store"},
+        )
