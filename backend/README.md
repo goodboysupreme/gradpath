@@ -2,10 +2,12 @@
 
 Contract-first FastAPI backend for GradPath's SI, PS-II, placement, and off-campus workflows.
 
-The backend is deliberately stateless at this stage. It provides domain contracts, the BITS
-Superset resume template, evidence-linked requirement coverage, and grounded resume/JD analysis
-plus private native-text document extraction and permission-aware JD normalization without
-changing the existing Next.js or Drizzle runtime.
+The public API surface is deliberately stateless at this stage. It provides domain contracts, the
+BITS Superset resume template, evidence-linked requirement coverage, grounded resume/JD analysis,
+private native-text document extraction, and permission-aware JD normalization without changing
+the existing Next.js or Drizzle runtime. An isolated PostgreSQL catalog persistence layer and its
+first Alembic migration are prepared offline, but no endpoint uses it and no live database has been
+migrated.
 
 ## Run locally
 
@@ -41,6 +43,42 @@ Open `http://localhost:8000/docs` for the generated API documentation.
 | `POST` | `/api/v1/documents/extract` | Internal PDF/DOCX native-text extraction |
 | `GET` | `/api/v1/job-sources` | Source registry, integration status, and acquisition policy |
 | `POST` | `/api/v1/job-descriptions/normalize` | Internal provenance validation and deterministic JD normalization |
+
+## Catalog persistence deployment boundary
+
+Alembic owns only the `career_catalog` PostgreSQL schema. Drizzle continues to own the existing
+`public` schema; the catalog has no foreign key into `public.users`. Never use `npm run db:push` to
+deploy or modify `career_catalog`, and do not use Drizzle schema push in production.
+
+Render the migration without a database or secret:
+
+```powershell
+uv run python -m alembic -c alembic.ini upgrade head --sql
+```
+
+A live migration is intentionally fail-closed. Before applying it, baseline and back up the live
+database, prove the restore procedure, and pre-create `gradpath_api_runtime` as a group role with
+`NOLOGIN`, `NOSUPERUSER`, and `NOBYPASSRLS`. The Alembic connection must be a separate migration
+owner; the future API login must be a non-owner member of `gradpath_api_runtime`. Set
+`GRADPATH_API_DATABASE_URL` only in the Alembic process and then run:
+
+```powershell
+uv run python -m alembic -c alembic.ini upgrade head
+```
+
+The migration revokes PUBLIC and default privileges, forces row-level security on all four catalog
+tables, grants the runtime role only the columns and operations needed for persistence, and never
+grants access to encrypted authorization evidence. Application connections must not be the schema
+owner, a superuser, or hold `BYPASSRLS`.
+
+Public content deduplicates across trusted providers, while each immutable provenance receipt keeps
+that provider's source/application URL, publication time, deadline, observation time, and source-run
+binding. Synthetic practice receipts are structurally prevented from carrying live-listing metadata.
+
+Only the safe `user_upload` source is seeded. Campus/provider/synthetic persistence stays disabled
+until there is an authenticated Next.js principal bridge, an audited source-run registration path,
+encryption and key rotation for authorization evidence, and per-user quotas. Do not manually mark a
+privileged source active to bypass those prerequisites.
 
 ## Authorized JD sources
 

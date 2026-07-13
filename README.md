@@ -28,11 +28,14 @@ Fill `.env.local`:
 | `AUTH_SECRET` | optional for now (auth paused) |
 | `AUTH_GOOGLE_*` | leave empty until you re-enable sign-in |
 
-Push schema:
+Push the existing Next.js/Drizzle schema in local development only:
 
 ```powershell
 npm run db:push
 ```
+
+Do not use `db:push` in production or for the FastAPI `career_catalog` schema. That isolated schema
+is owned by Alembic; see `backend/README.md` before any database deployment.
 
 Dev server:
 
@@ -49,7 +52,7 @@ Open http://localhost:3000
 | `npm run dev` | Dev server |
 | `npm run build` | Production build |
 | `npm run start` | Serve production build |
-| `npm run db:push` | Push Drizzle schema to Neon |
+| `npm run db:push` | Push the Drizzle schema in local development only |
 | `npm run db:studio` | Drizzle Studio |
 | `npm run preanalyze` | Run Python keyword pre-analysis CLI |
 
