@@ -103,7 +103,7 @@ SOURCE_DEFINITIONS = (
         identity_strategy=IdentityStrategy.EXTERNAL_ID,
         pagination_strategy=PaginationStrategy.OFFSET_LIMIT,
         change_strategy=ChangeStrategy.SNAPSHOT_AND_CONTENT_HASH,
-        official_documentation=("https://developers.smartrecruiters.com/docs/customer-overview"),
+        official_documentation=("https://developers.smartrecruiters.com/docs/endpoints"),
         requires_permission_basis=True,
     ),
 )

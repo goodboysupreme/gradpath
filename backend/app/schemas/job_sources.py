@@ -219,6 +219,8 @@ class JobDescriptionNormalizationRequest(CamelContractModel):
                 raise ValueError("internships require SI or off-campus tracks")
         elif not set(self.tracks) <= {CareerTrack.PLACEMENT, CareerTrack.OFF_CAMPUS}:
             raise ValueError("jobs require placement or off-campus tracks")
+        if self.source_id in OFFICIAL_SOURCE_IDS and self.tracks != (CareerTrack.OFF_CAMPUS,):
+            raise ValueError("official provider records must use only the off-campus track")
 
         if self.published_at is not None and self.published_at > self.observed_at:
             raise ValueError("publication cannot be later than observation")

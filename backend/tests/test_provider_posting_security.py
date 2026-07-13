@@ -17,6 +17,7 @@ from app.schemas.provider_postings import (
     ProviderPosting,
     ProviderRecordFailureCode,
 )
+from app.services import provider_postings as provider_posting_service
 from app.services.provider_postings import (
     ProviderPayloadError,
     parse_ashby_snapshot,
@@ -203,6 +204,27 @@ def test_duplicate_identity_is_fatal_even_when_duplicate_record_is_otherwise_inv
     assert error.value.code is ProviderPayloadErrorCode.DUPLICATE_POSTING_ID
 
 
+def test_flat_array_limit_is_rejected_before_json_object_allocation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"[" + (b"0," * provider_posting_service.MAX_JSON_ARRAY_ITEMS) + b"0]"
+
+    def fail_if_json_loads_runs(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        pytest.fail("json.loads must not run after the raw structural limit is exceeded")
+
+    monkeypatch.setattr(provider_posting_service.json, "loads", fail_if_json_loads_runs)
+
+    with pytest.raises(ProviderPayloadError) as error:
+        parse_lever_page(
+            account(JobSourceId.LEVER),
+            payload,
+            observed_at=OBSERVED_AT,
+        )
+
+    assert error.value.code is ProviderPayloadErrorCode.STRUCTURE_LIMIT_EXCEEDED
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -285,4 +307,30 @@ def test_ashby_optional_observed_id_does_not_change_canonical_url_snapshot_ident
 
     assert baseline_result.postings[0].snapshot_fingerprint == (
         with_id_result.postings[0].snapshot_fingerprint
+    )
+
+
+def test_ashby_emits_and_hashes_the_canonical_identity_url() -> None:
+    baseline = fixture_dict("ashby.json")
+    baseline_result = parse_ashby_snapshot(
+        account(JobSourceId.ASHBY),
+        encode_json(baseline),
+        observed_at=OBSERVED_AT,
+    )
+
+    trailing_slash = deepcopy(baseline)
+    jobs = cast(list[dict[str, object]], trailing_slash["jobs"])
+    jobs[0]["jobUrl"] = f"{jobs[0]['jobUrl']}/"
+    trailing_slash_result = parse_ashby_snapshot(
+        account(JobSourceId.ASHBY),
+        encode_json(trailing_slash),
+        observed_at=OBSERVED_AT,
+    )
+
+    assert trailing_slash_result.record_failures == ()
+    assert str(trailing_slash_result.postings[0].provider_record_ref) == str(
+        baseline_result.postings[0].provider_record_ref
+    )
+    assert trailing_slash_result.postings[0].snapshot_fingerprint == (
+        baseline_result.postings[0].snapshot_fingerprint
     )

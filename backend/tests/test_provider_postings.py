@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from pydantic import ValidationError
+
+from app.schemas.domain import CareerTrack, OpportunityKind
+from app.schemas.job_sources import JobSourceId, PermissionBasis
 from app.schemas.provider_postings import (
     ProviderAccountConfig,
     ProviderClassificationReason,
@@ -22,10 +26,6 @@ from app.services.provider_postings import (
     parse_lever_page,
     parse_smartrecruiters_page,
 )
-from pydantic import ValidationError
-
-from app.schemas.domain import CareerTrack, OpportunityKind
-from app.schemas.job_sources import JobSourceId, PermissionBasis
 
 FIXTURES = Path(__file__).parent / "fixtures" / "provider_postings"
 OBSERVED_AT = datetime(2026, 7, 13, 12, tzinfo=UTC)
@@ -44,8 +44,9 @@ def fixture_dict(name: str) -> dict[str, object]:
 def fixture_list(name: str) -> list[dict[str, object]]:
     value = json.loads(fixture_bytes(name))
     assert isinstance(value, list)
-    assert all(isinstance(item, dict) for item in value)
-    return cast(list[dict[str, object]], value)
+    items = cast(list[object], value)
+    assert all(isinstance(item, dict) for item in items)
+    return cast(list[dict[str, object]], items)
 
 
 def encode_json(value: object, *, sort_keys: bool = False) -> bytes:
@@ -84,7 +85,7 @@ def test_provider_account_config_accepts_only_official_sources_and_server_derive
 
     assert config.provider is JobSourceId.LEVER
     assert config.lever_region is ProviderRegion.EU
-    assert "fetch_url" not in config.model_fields
+    assert "fetch_url" not in type(config).model_fields
 
     with pytest.raises(ValidationError):
         account(JobSourceId.USER_UPLOAD)

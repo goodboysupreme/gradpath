@@ -137,6 +137,19 @@ canonical JSON SHA-256 fingerprint. The public fingerprint is content metadata, 
 authenticity or an authorization primitive. Future persistence must scope private deduplication by
 authenticated owner and campus deduplication by a trusted campus identifier.
 
+### Official provider parser boundary
+
+Phase A adds network-free, pure raw-byte parsers that produce a pre-normalization
+`ProviderPosting`. The Greenhouse, Lever, Ashby, and SmartRecruiters adapters remain `planned`:
+there are no provider routes, network fetches, database writes, or scheduled sync jobs. Do not pass
+`ProviderPosting` directly to the current `JobDescriptionNormalizationRequest`.
+
+The current normalization model conflates a public source URL with a server-only provider record
+reference, while SmartRecruiters may provide no public listing URL. Phase C therefore requires a
+typed provenance bridge and any necessary persistence migration; it must never invent a public URL.
+Public ATS records remain off-campus only. Campus SI, placement, and PS-II records require an
+authorized campus source.
+
 ## Private document extraction
 
 `POST /api/v1/documents/extract` accepts exactly one multipart `kind` (`resume` or `jd`) and one
