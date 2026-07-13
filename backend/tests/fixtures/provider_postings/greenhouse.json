@@ -1,0 +1,22 @@
+{
+  "fixtureNotice": "Synthetic schema-shaped test data",
+  "jobs": [
+    {
+      "id": 7982460,
+      "internal_job_id": 481516,
+      "title": "Software Engineering Intern",
+      "updated_at": "2026-07-12T09:30:00Z",
+      "first_published": "2026-07-01T08:00:00Z",
+      "application_deadline": "2026-08-15T23:59:00Z",
+      "absolute_url": "https://careers.example.org/roles/software-engineering-intern",
+      "location": {
+        "name": "Bengaluru, India"
+      },
+      "content": "<p>Build reliable Python services &amp; APIs for student-facing products.</p><script src=\"https://tracker.invalid/x.js\">secret()</script><ul><li>Write focused tests for every change.</li><li>Collaborate with engineers on production releases.</li></ul>",
+      "company_name": "Example Systems"
+    }
+  ],
+  "meta": {
+    "total": 1
+  }
+}

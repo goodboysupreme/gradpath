@@ -1,0 +1,26 @@
+[
+  {
+    "id": "lever-example-1",
+    "text": "Backend Engineering Intern",
+    "categories": {
+      "commitment": "Internship",
+      "location": "Bengaluru, India",
+      "team": "Platform",
+      "department": "Engineering"
+    },
+    "openingPlain": "Join a small platform team building reliable student-facing services.",
+    "descriptionBodyPlain": "Build typed Python APIs and improve production observability.",
+    "descriptionPlain": "This aggregate fallback must not duplicate the component description.",
+    "lists": [
+      {
+        "text": "What you will do",
+        "content": "<ul><li>Design bounded ingestion contracts.</li><li>Write focused parser tests.</li></ul>"
+      }
+    ],
+    "additionalPlain": "You will receive weekly engineering mentorship and code review.",
+    "hostedUrl": "https://jobs.lever.co/example/lever-example-1",
+    "applyUrl": "https://jobs.lever.co/example/lever-example-1/apply",
+    "workplaceType": "hybrid",
+    "createdAt": 1783848600000
+  }
+]

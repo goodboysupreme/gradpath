@@ -95,6 +95,9 @@ def test_job_source_registry_is_permission_first_and_explicitly_not_a_scraper() 
     assert by_id["ashby"]["identityStrategy"] == "canonical_url"
     assert by_id["lever"]["paginationStrategy"] == "skip_limit"
     assert by_id["smartrecruiters"]["paginationStrategy"] == "offset_limit"
+    assert by_id["smartrecruiters"]["officialDocumentation"] == (
+        "https://developers.smartrecruiters.com/docs/endpoints"
+    )
 
 
 def test_normalization_requires_internal_authentication() -> None:
@@ -283,6 +286,7 @@ def test_official_provider_record_requires_complete_provenance_and_permission() 
             "permissionBasis": "public_api_terms_reviewed",
             "sourceAccount": "acme-board",
             "schemaVersion": "greenhouse-job-board-v1",
+            "tracks": ["off_campus"],
         }
     )
 
@@ -326,6 +330,36 @@ def test_official_provider_record_requires_complete_provenance_and_permission() 
     )
 
 
+@pytest.mark.parametrize(
+    ("tracks", "opportunity_kind"),
+    [
+        (["si"], "internship"),
+        (["placement"], "job"),
+        (["ps2"], "station_project"),
+    ],
+)
+def test_official_provider_records_cannot_claim_campus_tracks(
+    tracks: list[str],
+    opportunity_kind: str,
+) -> None:
+    payload = valid_user_upload()
+    payload.update(
+        {
+            "sourceId": "greenhouse",
+            "permissionBasis": "public_api_terms_reviewed",
+            "sourceAccount": "acme-board",
+            "externalId": "1234567",
+            "schemaVersion": "greenhouse-job-board-v1",
+            "sourceUrl": "https://boards.greenhouse.io/acme/jobs/1234567",
+            "applicationUrl": "https://boards.greenhouse.io/acme/jobs/1234567",
+            "tracks": tracks,
+            "opportunityKind": opportunity_kind,
+        }
+    )
+
+    assert post_normalization(payload, include_source_token=True).status_code == 422
+
+
 def test_official_provider_urls_are_https_and_bound_to_the_provider() -> None:
     payload = valid_user_upload()
     payload.update(
@@ -337,6 +371,7 @@ def test_official_provider_urls_are_https_and_bound_to_the_provider() -> None:
             "schemaVersion": "greenhouse-job-board-v1",
             "sourceUrl": "http://boards.greenhouse.io/acme/jobs/1234567",
             "applicationUrl": "https://boards.greenhouse.io/acme/jobs/1234567",
+            "tracks": ["off_campus"],
         }
     )
 
@@ -363,6 +398,7 @@ def test_ashby_uses_canonical_url_identity_without_inventing_an_external_id() ->
             "sourceUrl": "https://jobs.ashbyhq.com/acme/example-job",
             "applicationUrl": "https://jobs.ashbyhq.com/acme/example-job/application",
             "schemaVersion": "ashby-public-posting-v1",
+            "tracks": ["off_campus"],
         }
     )
 

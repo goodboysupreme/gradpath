@@ -63,6 +63,7 @@ def normalized_greenhouse() -> Any:
         publishedAt="2026-07-01T09:00:00+05:30",
         applicationDeadline="2026-08-01T23:59:00+05:30",
         schemaVersion="greenhouse-job-board-v1",
+        tracks=["off_campus"],
     )
 
 
@@ -77,6 +78,7 @@ def normalized_lever() -> Any:
         publishedAt="2026-07-02T10:00:00+05:30",
         applicationDeadline="2026-08-15T23:59:00+05:30",
         schemaVersion="lever-postings-v0",
+        tracks=["off_campus"],
     )
 
 
@@ -430,6 +432,7 @@ def test_dedupe_keys_preserve_tenant_and_trust_boundaries() -> None:
         sourceAccount="gradpath-samples-v1",
         externalId="sde-intern-sample",
         schemaVersion="synthetic-v1",
+        tracks=["off_campus"],
     )
     live_write = build_write(
         public_live,
