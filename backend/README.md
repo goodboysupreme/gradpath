@@ -28,6 +28,38 @@ Set a different random `GRADPATH_API_SOURCE_INGESTION_TOKEN` of at least 32 char
 trusted campus/ATS connector jobs. It must not be available to the user-facing Next.js proxy.
 Privileged source normalization fails closed when this second credential is absent.
 
+## Signed request-context configuration boundary
+
+Signed request context is backend-only groundwork and is not wired to any endpoint yet. The
+current routes still use their existing internal/source token boundaries, and setting the new
+values does not enable authenticated catalog persistence. Keep
+`GRADPATH_API_REQUEST_CONTEXT_SIGNING_KEYS` as `{}` and leave
+`GRADPATH_API_AUDIT_PSEUDONYM_SECRET` unset until the authenticated Next.js bridge, shared atomic
+replay store, and request verifier are deployed together.
+
+The signing-key setting is a JSON object from rotatable `kid` values to HMAC secrets. A key ID is
+1-64 ASCII letters, digits, dots, underscores, or hyphens, starts and ends with a letter or digit,
+and the ring accepts at most 16 keys. Each signing secret and the audit pseudonym secret must be an
+independent random value of 32-1,024 UTF-8 bytes with no surrounding whitespace. Configuration
+rejects duplicate values across the signing ring, audit pseudonym secret, internal API token,
+source-ingestion token, and OpenRouter API key.
+
+| Secret | Exact boundary |
+|---|---|
+| Request-context signing key | Future authenticated Next.js server signer and FastAPI verifier only |
+| Audit pseudonym secret | FastAPI audit-identifier HMAC only; never signs or verifies requests |
+| Internal API token | Existing Next.js-to-FastAPI private route authentication only |
+| Source-ingestion token | Trusted campus/official-provider connector jobs only |
+| OpenRouter API key | FastAPI outbound OpenRouter calls only |
+| Auth.js secret | Next.js session/authentication only; not configured in FastAPI |
+| Database/Alembic credential | Database connectivity or migration only; never request signing |
+
+None of these values belongs in a `NEXT_PUBLIC_*` variable, browser request, log, audit event, or
+repository. A future Next.js proxy must discard browser-supplied GradPath trust headers and sign
+only after resolving a stable server-side Auth.js database user ID. During rotation, deploy the
+new verification key before moving the signer to its `kid`, retain the previous key only through
+the maximum verification/replay window, then remove it.
+
 Open `http://localhost:8000/docs` for the generated API documentation.
 
 ## Current endpoints
