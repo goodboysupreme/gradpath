@@ -11,7 +11,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28,<1",
+  "httpx2>=2,<3",
   "pyright>=1.1,<2",
   "pytest>=9,<10",
   "pytest-cov>=7,<8",
@@ -24,6 +24,7 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers"]
+pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true

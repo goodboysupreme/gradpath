@@ -63,3 +63,10 @@ def test_bits_template_matches_the_supplied_one_page_structure(client: TestClien
     academic = template["sections"][0]
     assert academic["layout"] == "table"
     assert academic["columns"] == ["course", "institute", "board", "score", "year"]
+
+
+def test_unknown_resume_template_returns_404(client: TestClient) -> None:
+    response = client.get("/api/v1/resume-templates/unknown-template")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Resume template not found"}

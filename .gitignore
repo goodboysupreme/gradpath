@@ -19,6 +19,10 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.coverage
+.pytest_cache/
+.ruff_cache/
+htmlcov/
 
 # misc
 .DS_Store
