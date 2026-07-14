@@ -1,4 +1,21 @@
+from collections.abc import Generator
+
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
+
+from app.config import Settings
+from app.main import create_app
+
+INTERNAL_TOKEN = "test-internal-token-that-is-long-enough"
+
+
+@pytest.fixture
+def client() -> Generator[TestClient, None, None]:
+    settings = Settings(internal_api_token=SecretStr(INTERNAL_TOKEN))
+    with TestClient(create_app(settings=settings)) as test_client:
+        test_client.headers.update({"X-GradPath-Internal-Token": INTERNAL_TOKEN})
+        yield test_client
 
 
 def samsung_coverage_payload() -> dict[str, object]:
@@ -48,6 +65,32 @@ def samsung_coverage_payload() -> dict[str, object]:
             }
         ],
     }
+
+
+def test_coverage_requires_configured_internal_authentication() -> None:
+    settings = Settings(internal_api_token=SecretStr(INTERNAL_TOKEN))
+    with TestClient(create_app(settings=settings)) as client:
+        missing = client.post("/api/v1/coverage/evaluate", json=samsung_coverage_payload())
+        wrong = client.post(
+            "/api/v1/coverage/evaluate",
+            json=samsung_coverage_payload(),
+            headers={"X-GradPath-Internal-Token": "wrong-token-that-is-still-long-enough"},
+        )
+
+    assert missing.status_code == 401
+    assert wrong.status_code == 401
+
+
+def test_coverage_authentication_fails_closed_when_unconfigured() -> None:
+    settings = Settings(internal_api_token=None)
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/api/v1/coverage/evaluate",
+            json=samsung_coverage_payload(),
+            headers={"X-GradPath-Internal-Token": INTERNAL_TOKEN},
+        )
+
+    assert response.status_code == 503
 
 
 def test_any_of_group_suppresses_unmatched_alternatives(client: TestClient) -> None:
