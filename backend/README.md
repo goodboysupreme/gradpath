@@ -70,11 +70,15 @@ Open `http://localhost:8000/docs` for the generated API documentation.
 | `GET` | `/health/ready` | Service readiness |
 | `GET` | `/api/v1/capabilities` | Supported career tracks and workflows |
 | `GET` | `/api/v1/resume-templates/bits-superset-v1` | BITS Superset one-page template contract |
-| `POST` | `/api/v1/coverage/evaluate` | Evidence-linked JD requirement coverage |
+| `POST` | `/api/v1/coverage/evaluate` | Internal, evidence-linked JD requirement coverage |
 | `POST` | `/api/v1/analyses/evaluate` | Internal, evidence-grounded resume/JD readiness analysis |
 | `POST` | `/api/v1/documents/extract` | Internal PDF/DOCX native-text extraction |
 | `GET` | `/api/v1/job-sources` | Source registry, integration status, and acquisition policy |
 | `POST` | `/api/v1/job-descriptions/normalize` | Internal provenance validation and deterministic JD normalization |
+
+Coverage accepts verification and grouping decisions, so it is restricted to trusted server
+callers. Evidence guidance remains an internal service with no HTTP route until normalized jobs,
+requirements, groups, and evidence confirmations are resolved from server-owned or signed records.
 
 ## Catalog persistence deployment boundary
 
