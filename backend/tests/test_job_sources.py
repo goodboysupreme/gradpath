@@ -457,8 +457,13 @@ def test_normalization_rejects_oversized_json_before_whitespace_normalization() 
 
 
 def test_validation_sanitization_does_not_change_other_endpoint_contracts() -> None:
-    with TestClient(create_app()) as client:
-        response = client.post("/api/v1/coverage/evaluate", json={})
+    settings = Settings(internal_api_token=SecretStr(INTERNAL_TOKEN))
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.post(
+            "/api/v1/coverage/evaluate",
+            json={},
+            headers={"X-GradPath-Internal-Token": INTERNAL_TOKEN},
+        )
 
     assert response.status_code == 422
     assert isinstance(response.json()["detail"], list)

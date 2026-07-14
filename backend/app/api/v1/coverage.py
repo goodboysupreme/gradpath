@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.dependencies import require_internal_authentication
 from app.schemas.coverage import CoverageEvaluationRequest, CoverageEvaluationResponse
 from app.services.coverage import evaluate_coverage
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_internal_authentication)])
 
 
 @router.post("/coverage/evaluate", response_model=CoverageEvaluationResponse)

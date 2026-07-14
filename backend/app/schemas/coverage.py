@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Self
 
 from pydantic import Field, model_validator
 
@@ -78,6 +78,12 @@ class RequirementMatch(ContractModel):
     evidence_claim_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=20)
     confidence: float = Field(ge=0, le=1)
     verified: bool
+
+    @model_validator(mode="after")
+    def evidence_references_are_unique(self) -> Self:
+        if len(self.evidence_claim_ids) != len(set(self.evidence_claim_ids)):
+            raise ValueError("evidence_claim_ids must be unique within a match")
+        return self
 
 
 class CoverageEvaluationRequest(ContractModel):
